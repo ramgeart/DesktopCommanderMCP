@@ -3,7 +3,7 @@ import fs from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
 import os from 'os';
-import { configManager, SSHCredential } from './config-manager.js';
+import { SSHCredential } from './config-manager.js';
 import { capture } from './utils/capture.js';
 
 export interface SSHSession {
@@ -22,23 +22,72 @@ export interface SSHCommandResult {
   signal?: string;
 }
 
+export interface SSHConfig {
+  sshCredentials: SSHCredential[];
+}
+
 /**
  * Manager for SSH connections and remote command execution
  */
 export class SSHManager {
   private sessions: Map<string, SSHSession> = new Map();
   private connectionCounter = 0;
+  private credentials: SSHCredential[] = [];
+  private configFilePath: string | null = null;
 
   /**
-   * Get SSH credential by name from config
+   * Load SSH credentials from external config file
    */
-  private async getCredential(name: string): Promise<SSHCredential | null> {
-    const config = await configManager.getConfig();
-    if (!config.sshCredentials || config.sshCredentials.length === 0) {
-      return null;
-    }
+  async loadCredentials(configPath: string): Promise<void> {
+    try {
+      // Resolve path (support ~ for home directory)
+      let resolvedPath = configPath;
+      if (configPath.startsWith('~/')) {
+        resolvedPath = path.join(os.homedir(), configPath.substring(2));
+      }
 
-    return config.sshCredentials.find(cred => cred.name === name) || null;
+      // Check if file exists
+      if (!existsSync(resolvedPath)) {
+        throw new Error(`SSH config file not found: ${resolvedPath}`);
+      }
+
+      // Read and parse the config file
+      const configContent = await fs.readFile(resolvedPath, 'utf8');
+      const config: SSHConfig = JSON.parse(configContent);
+
+      if (!config.sshCredentials || !Array.isArray(config.sshCredentials)) {
+        throw new Error('Invalid SSH config file: missing or invalid sshCredentials array');
+      }
+
+      this.credentials = config.sshCredentials;
+      this.configFilePath = resolvedPath;
+
+      capture('ssh_config_loaded', {
+        credentialCount: this.credentials.length,
+        configPath: resolvedPath
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      capture('ssh_config_load_error', {
+        error: errorMessage,
+        configPath
+      });
+      throw new Error(`Failed to load SSH config: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Get SSH credential by name
+   */
+  private getCredential(name: string): SSHCredential | null {
+    return this.credentials.find(cred => cred.name === name) || null;
+  }
+
+  /**
+   * Check if credentials are loaded
+   */
+  hasCredentials(): boolean {
+    return this.credentials.length > 0;
   }
 
   /**
@@ -123,7 +172,7 @@ export class SSHManager {
     timeoutMs: number = 30000
   ): Promise<SSHCommandResult> {
     // Get credential
-    const credential = await this.getCredential(credentialName);
+    const credential = this.getCredential(credentialName);
     if (!credential) {
       throw new Error(`SSH credential '${credentialName}' not found in configuration`);
     }
@@ -244,13 +293,12 @@ export class SSHManager {
   /**
    * List all SSH credentials configured (without sensitive data)
    */
-  async listCredentials(): Promise<Array<{ name: string; host: string; username: string }>> {
-    const config = await configManager.getConfig();
-    if (!config.sshCredentials || config.sshCredentials.length === 0) {
+  listCredentials(): Array<{ name: string; host: string; username: string }> {
+    if (this.credentials.length === 0) {
       return [];
     }
 
-    return config.sshCredentials.map(cred => ({
+    return this.credentials.map(cred => ({
       name: cred.name,
       host: cred.host,
       username: cred.username
@@ -262,7 +310,7 @@ export class SSHManager {
    */
   async testConnection(credentialName: string): Promise<{ success: boolean; message: string }> {
     try {
-      const credential = await this.getCredential(credentialName);
+      const credential = this.getCredential(credentialName);
       if (!credential) {
         return {
           success: false,

@@ -1,19 +1,4 @@
 {
-  "blockedCommands": [
-    "format",
-    "mount",
-    "umount",
-    "mkfs",
-    "fdisk",
-    "dd",
-    "sudo",
-    "su",
-    "passwd",
-    "adduser",
-    "useradd",
-    "usermod",
-    "groupadd"
-  ],
   "sshCredentials": [
     {
       "name": "production-server",
@@ -36,8 +21,5 @@
       "username": "developer",
       "privateKeyPath": "/Users/username/.ssh/dev_key"
     }
-  ],
-  "telemetryEnabled": true,
-  "fileWriteLineLimit": 50,
-  "fileReadLineLimit": 1000
+  ]
 }

@@ -1,46 +1,56 @@
 /**
  * Test SSH functionality
- * This test verifies that SSH credentials can be managed and SSH commands can be simulated
+ * This test verifies that SSH credentials can be loaded from external config file
  */
 
 import { strict as assert } from 'assert';
-import { configManager } from '../dist/config-manager.js';
 import { sshManager } from '../dist/ssh-manager.js';
+import fs from 'fs/promises';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import os from 'os';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 console.log('Starting SSH functionality tests...\n');
 
-// Test 1: Add SSH credentials to config
-async function testAddSSHCredentials() {
-  console.log('Test 1: Add SSH credentials to config');
+// Create a temporary config file for testing
+const testConfigPath = path.join(os.tmpdir(), 'test-ssh-config.json');
+
+// Test 1: Load SSH credentials from file
+async function testLoadCredentials() {
+  console.log('Test 1: Load SSH credentials from file');
   
-  const testCredential = {
-    name: 'test-server',
-    host: 'test.example.com',
-    port: 22,
-    username: 'testuser',
-    privateKeyPath: '~/.ssh/test_key',
-    passphrase: '' // Empty passphrase for testing - in production use secure passphrases
+  const testConfig = {
+    sshCredentials: [
+      {
+        name: 'test-server',
+        host: 'test.example.com',
+        port: 22,
+        username: 'testuser',
+        privateKeyPath: '~/.ssh/test_key',
+        passphrase: '' // Empty passphrase for testing
+      }
+    ]
   };
 
-  // Add credentials to config
-  await configManager.setValue('sshCredentials', [testCredential]);
+  // Write test config to file
+  await fs.writeFile(testConfigPath, JSON.stringify(testConfig, null, 2), 'utf8');
   
-  // Verify credentials were saved
-  const config = await configManager.getConfig();
-  assert(config.sshCredentials, 'SSH credentials should be in config');
-  assert.equal(config.sshCredentials.length, 1, 'Should have 1 credential');
-  assert.equal(config.sshCredentials[0].name, 'test-server', 'Credential name should match');
-  assert.equal(config.sshCredentials[0].host, 'test.example.com', 'Host should match');
-  assert.equal(config.sshCredentials[0].username, 'testuser', 'Username should match');
+  // Load credentials from file
+  await sshManager.loadCredentials(testConfigPath);
   
-  console.log('✓ SSH credentials added successfully\n');
+  assert(sshManager.hasCredentials(), 'SSH manager should have credentials loaded');
+  
+  console.log('✓ SSH credentials loaded successfully from file\n');
 }
 
 // Test 2: List SSH credentials
 async function testListSSHCredentials() {
   console.log('Test 2: List SSH credentials');
   
-  const credentials = await sshManager.listCredentials();
+  const credentials = sshManager.listCredentials();
   
   assert(Array.isArray(credentials), 'Should return an array');
   assert.equal(credentials.length, 1, 'Should have 1 credential');
@@ -59,29 +69,35 @@ async function testListSSHCredentials() {
 async function testMultipleCredentials() {
   console.log('Test 3: Multiple SSH credentials');
   
-  const credentials = [
-    {
-      name: 'server1',
-      host: 'server1.example.com',
-      username: 'user1',
-      privateKeyPath: '~/.ssh/key1'
-    },
-    {
-      name: 'server2',
-      host: 'server2.example.com',
-      port: 2222,
-      username: 'user2',
-      privateKeyPath: '~/.ssh/key2',
-      passphrase: '' // Use empty string or secure environment variable in production
-    }
-  ];
+  const testConfig = {
+    sshCredentials: [
+      {
+        name: 'server1',
+        host: 'server1.example.com',
+        username: 'user1',
+        privateKeyPath: '~/.ssh/key1'
+      },
+      {
+        name: 'server2',
+        host: 'server2.example.com',
+        port: 2222,
+        username: 'user2',
+        privateKeyPath: '~/.ssh/key2',
+        passphrase: '' // Use empty string or secure environment variable in production
+      }
+    ]
+  };
   
-  await configManager.setValue('sshCredentials', credentials);
+  // Write new config
+  await fs.writeFile(testConfigPath, JSON.stringify(testConfig, null, 2), 'utf8');
   
-  const listedCredentials = await sshManager.listCredentials();
-  assert.equal(listedCredentials.length, 2, 'Should have 2 credentials');
-  assert.equal(listedCredentials[0].name, 'server1', 'First credential name should match');
-  assert.equal(listedCredentials[1].name, 'server2', 'Second credential name should match');
+  // Reload credentials
+  await sshManager.loadCredentials(testConfigPath);
+  
+  const credentials = sshManager.listCredentials();
+  assert.equal(credentials.length, 2, 'Should have 2 credentials');
+  assert.equal(credentials[0].name, 'server1', 'First credential name should match');
+  assert.equal(credentials[1].name, 'server2', 'Second credential name should match');
   
   console.log('✓ Multiple SSH credentials managed successfully\n');
 }
@@ -104,32 +120,64 @@ async function testSSHCommandErrorHandling() {
 async function testConfigurationValidation() {
   console.log('Test 5: Configuration validation');
   
-  const validCredential = {
-    name: 'valid-server',
-    host: 'valid.example.com',
-    username: 'validuser',
-    privateKeyPath: '/path/to/key'
+  const validConfig = {
+    sshCredentials: [
+      {
+        name: 'valid-server',
+        host: 'valid.example.com',
+        username: 'validuser',
+        privateKeyPath: '/path/to/key'
+      }
+    ]
   };
   
-  await configManager.setValue('sshCredentials', [validCredential]);
-  const config = await configManager.getConfig();
+  await fs.writeFile(testConfigPath, JSON.stringify(validConfig, null, 2), 'utf8');
+  await sshManager.loadCredentials(testConfigPath);
   
-  assert(config.sshCredentials[0].name, 'Name is required');
-  assert(config.sshCredentials[0].host, 'Host is required');
-  assert(config.sshCredentials[0].username, 'Username is required');
+  const credentials = sshManager.listCredentials();
+  assert.equal(credentials.length, 1, 'Should have 1 credential');
+  assert(credentials[0].name, 'Name is required');
+  assert(credentials[0].host, 'Host is required');
+  assert(credentials[0].username, 'Username is required');
   
   console.log('✓ Configuration validation working correctly\n');
 }
 
-// Test 6: Cleanup and reset
+// Test 6: Invalid config file handling
+async function testInvalidConfigHandling() {
+  console.log('Test 6: Invalid config file handling');
+  
+  // Test with non-existent file
+  try {
+    await sshManager.loadCredentials('/non/existent/path.json');
+    assert.fail('Should have thrown an error for non-existent file');
+  } catch (error) {
+    assert(error.message.includes('not found'), 'Error should mention file not found');
+    console.log('✓ Correctly handles non-existent config file');
+  }
+  
+  // Test with invalid JSON
+  const invalidJsonPath = path.join(os.tmpdir(), 'invalid-ssh-config.json');
+  await fs.writeFile(invalidJsonPath, 'invalid json content', 'utf8');
+  
+  try {
+    await sshManager.loadCredentials(invalidJsonPath);
+    assert.fail('Should have thrown an error for invalid JSON');
+  } catch (error) {
+    assert(error.message.includes('Failed to load SSH config'), 'Error should mention config load failure');
+    console.log('✓ Correctly handles invalid JSON\n');
+  }
+  
+  // Cleanup
+  await fs.unlink(invalidJsonPath).catch(() => {});
+}
+
+// Test 7: Cleanup
 async function testCleanup() {
-  console.log('Test 6: Cleanup');
+  console.log('Test 7: Cleanup');
   
-  // Clean up test credentials
-  await configManager.setValue('sshCredentials', []);
-  
-  const credentials = await sshManager.listCredentials();
-  assert.equal(credentials.length, 0, 'Credentials should be cleared');
+  // Clean up test config file
+  await fs.unlink(testConfigPath).catch(() => {});
   
   console.log('✓ Cleanup completed successfully\n');
 }
@@ -137,17 +185,20 @@ async function testCleanup() {
 // Run all tests
 async function runTests() {
   try {
-    await testAddSSHCredentials();
+    await testLoadCredentials();
     await testListSSHCredentials();
     await testMultipleCredentials();
     await testSSHCommandErrorHandling();
     await testConfigurationValidation();
+    await testInvalidConfigHandling();
     await testCleanup();
     
     console.log('✅ All SSH tests passed!');
     process.exit(0);
   } catch (error) {
     console.error('❌ Test failed:', error);
+    // Cleanup on failure
+    await fs.unlink(testConfigPath).catch(() => {});
     process.exit(1);
   }
 }

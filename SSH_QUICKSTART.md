@@ -6,9 +6,9 @@ Desktop Commander MCP now supports executing commands on remote SSH servers! Thi
 
 ## Setup Steps
 
-### 1. Configure SSH Credentials
+### 1. Create SSH Credentials File
 
-Edit your Desktop Commander config file at `~/.claude-server-commander/config.json` and add SSH credentials:
+Create a file named `ssh_servers.json` with your SSH credentials:
 
 ```json
 {
@@ -25,7 +25,29 @@ Edit your Desktop Commander config file at `~/.claude-server-commander/config.js
 }
 ```
 
-### 2. Prepare Your SSH Keys
+### 2. Configure MCP Server
+
+Add Desktop Commander to your MCP configuration (`claude_desktop_config.json`) with the `--config` flag:
+
+```json
+{
+  "mcpServers": {
+    "desktop-commander": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "github:ramgeart/DesktopCommanderMCP",
+        "--config",
+        "ssh_servers.json"
+      ]
+    }
+  }
+}
+```
+
+**Note:** Place `ssh_servers.json` in the same directory as your MCP config, or provide the full path.
+
+### 3. Prepare Your SSH Keys
 
 Ensure your SSH key pair is set up:
 
@@ -36,8 +58,6 @@ ssh-keygen -t rsa -b 4096 -C "your_email@example.com"
 # Copy your public key to the remote server
 ssh-copy-id -i ~/.ssh/id_rsa.pub user@hostname
 ```
-
-### 3. Test the Connection
 
 Ask Claude to test your SSH connection:
 
@@ -87,7 +107,7 @@ This will call `test_ssh_connection("my-server")` to verify connectivity.
 
 ## Multiple Servers
 
-You can configure multiple servers for different environments:
+You can configure multiple servers for different environments in your `ssh_servers.json` file:
 
 ```json
 {
@@ -122,7 +142,13 @@ Then reference them by name:
 "Run tests on development"
 ```
 
-## Troubleshooting
+## Security Notes
+
+- ✅ Uses secure public/private key authentication only
+- ✅ No password authentication supported (security best practice)
+- ✅ Passphrases can be stored for encrypted keys
+- ✅ Private keys never exposed in tool outputs
+- ⚠️ Ensure SSH config file has restrictive permissions: `chmod 600 ssh_servers.json`
 
 ### Connection Failed
 - Verify host and port are correct
@@ -144,7 +170,7 @@ Then reference them by name:
 
 For complete documentation, see:
 - `SSH_REMOTE_EXECUTION.md` - Comprehensive guide
-- `config.example.json` - Configuration examples
+- `config.example.json` - Configuration examples (Note: Use external file with `--config` flag instead)
 
 ## Support
 

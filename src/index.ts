@@ -47,6 +47,23 @@ async function runServer() {
     // Set global flag for onboarding control
     (global as any).disableOnboarding = DISABLE_ONBOARDING;
 
+    // Parse SSH config file path from --config flag
+    const configFlagIndex = process.argv.indexOf('--config');
+    if (configFlagIndex !== -1 && configFlagIndex + 1 < process.argv.length) {
+      const sshConfigPath = process.argv[configFlagIndex + 1];
+      deferLog('info', `Loading SSH config from: ${sshConfigPath}`);
+      
+      try {
+        const { sshManager } = await import('./ssh-manager.js');
+        await sshManager.loadCredentials(sshConfigPath);
+        deferLog('info', 'SSH credentials loaded successfully');
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        deferLog('warning', `Failed to load SSH config: ${errorMessage}`);
+        deferLog('info', 'SSH tools will be unavailable');
+      }
+    }
+
     // Create transport FIRST so all logging gets properly buffered
     // This must happen before any code that might use logger.*
     const transport = new FilteredStdioServerTransport();

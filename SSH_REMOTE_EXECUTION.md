@@ -12,9 +12,31 @@ The SSH remote execution feature allows you to:
 
 ## Configuration
 
-SSH credentials are configured in the server configuration file (`~/.claude-server-commander/config.json`). You can add multiple credentials for different servers.
+SSH credentials are configured in an external JSON file that you specify when starting the MCP server using the `--config` flag.
 
-### Configuration Structure
+### MCP Server Configuration
+
+Add Desktop Commander to your MCP configuration with the `--config` flag pointing to your SSH credentials file:
+
+```json
+{
+  "mcpServers": {
+    "desktop-commander": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "github:ramgeart/DesktopCommanderMCP",
+        "--config",
+        "ssh_servers.json"
+      ]
+    }
+  }
+}
+```
+
+### SSH Credentials File Structure
+
+Create a file named `ssh_servers.json` (or any name you prefer) with your SSH credentials:
 
 ```json
 {

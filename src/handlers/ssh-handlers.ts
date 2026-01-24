@@ -23,6 +23,17 @@ export async function handleExecuteSSHCommand(args: unknown): Promise<ServerResu
     };
   }
 
+  // Check if credentials are loaded
+  if (!sshManager.hasCredentials()) {
+    return {
+      content: [{
+        type: "text",
+        text: 'No SSH credentials loaded. Please provide a config file using the --config flag when starting the server.'
+      }],
+      isError: true
+    };
+  }
+
   const { credential_name, command, timeout_ms } = parsed.data;
 
   try {
@@ -79,13 +90,23 @@ export async function handleListSSHCredentials(args: unknown): Promise<ServerRes
   }
 
   try {
-    const credentials = await sshManager.listCredentials();
+    // Check if credentials are loaded
+    if (!sshManager.hasCredentials()) {
+      return {
+        content: [{
+          type: "text",
+          text: 'No SSH credentials loaded. Please provide a config file using the --config flag when starting the server.'
+        }]
+      };
+    }
+
+    const credentials = sshManager.listCredentials();
 
     if (credentials.length === 0) {
       return {
         content: [{
           type: "text",
-          text: 'No SSH credentials configured. Add credentials to the config file under "sshCredentials".'
+          text: 'No SSH credentials configured in the config file.'
         }]
       };
     }
@@ -123,6 +144,17 @@ export async function handleTestSSHConnection(args: unknown): Promise<ServerResu
       content: [{
         type: "text",
         text: `Invalid arguments: ${parsed.error.message}`
+      }],
+      isError: true
+    };
+  }
+
+  // Check if credentials are loaded
+  if (!sshManager.hasCredentials()) {
+    return {
+      content: [{
+        type: "text",
+        text: 'No SSH credentials loaded. Please provide a config file using the --config flag when starting the server.'
       }],
       isError: true
     };
