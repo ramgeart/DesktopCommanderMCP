@@ -59,7 +59,7 @@ async function runServer() {
         deferLog('info', 'SSH credentials loaded successfully');
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
-        deferLog('warning', `Failed to load SSH config: ${errorMessage}`);
+        deferLog('warning', `SSH config load failed: ${errorMessage}`);
         deferLog('info', 'SSH tools will be unavailable');
       }
     }

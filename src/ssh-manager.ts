@@ -72,7 +72,7 @@ export class SSHManager {
         error: errorMessage,
         configPath
       });
-      throw new Error(`Failed to load SSH config: ${errorMessage}`);
+      throw error; // Preserve original error
     }
   }
 
