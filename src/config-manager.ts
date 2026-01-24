@@ -6,6 +6,15 @@ import os from 'os';
 import { VERSION } from './version.js';
 import { CONFIG_FILE } from './config.js';
 
+export interface SSHCredential {
+  name: string;
+  host: string;
+  port?: number;
+  username: string;
+  privateKeyPath?: string;
+  passphrase?: string;
+}
+
 export interface ServerConfig {
   blockedCommands?: string[];
   defaultShell?: string;
@@ -15,6 +24,7 @@ export interface ServerConfig {
   fileReadLineLimit?: number; // Default line limit for file read operations (changed from character-based)
   clientId?: string; // Unique client identifier for analytics
   currentClient?: ClientInfo; // Current connected client information
+  sshCredentials?: SSHCredential[]; // SSH credentials for remote execution
   [key: string]: any; // Allow for arbitrary configuration keys (including abTest_* keys)
 }
 

@@ -155,6 +155,19 @@ export const InteractWithProcessArgsSchema = z.object({
   verbose_timing: z.boolean().optional(),
 });
 
+// SSH tools schemas
+export const ExecuteSSHCommandArgsSchema = z.object({
+  credential_name: z.string(),
+  command: z.string(),
+  timeout_ms: z.number().optional().default(30000),
+});
+
+export const ListSSHCredentialsArgsSchema = z.object({});
+
+export const TestSSHConnectionArgsSchema = z.object({
+  credential_name: z.string(),
+});
+
 // Usage stats schema
 export const GetUsageStatsArgsSchema = z.object({});
 

@@ -47,6 +47,9 @@ import {
     GetPromptsArgsSchema,
     GetRecentToolCallsArgsSchema,
     WritePdfArgsSchema,
+    ExecuteSSHCommandArgsSchema,
+    ListSSHCredentialsArgsSchema,
+    TestSSHConnectionArgsSchema,
 } from './tools/schemas.js';
 import { getConfig, setConfigValue } from './tools/config.js';
 import { getUsageStats } from './tools/usage.js';
@@ -985,6 +988,83 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                 },
             },
             {
+                name: "execute_ssh_command",
+                description: `
+                        Execute a command on a remote SSH server.
+                        
+                        PREREQUISITES:
+                        - SSH credentials must be configured in the server configuration file
+                        - Each credential requires: name, host, username, private key path
+                        - Optional: port (default: 22), passphrase for encrypted keys
+                        
+                        PARAMETERS:
+                        - credential_name: Name of the SSH credential from configuration
+                        - command: Command to execute on the remote server
+                        - timeout_ms: Optional timeout in milliseconds (default: 30000)
+                        
+                        USAGE:
+                        1. First, list available credentials with list_ssh_credentials
+                        2. Then execute commands using the credential name
+                        
+                        EXAMPLES:
+                        - execute_ssh_command("production-server", "ls -la /var/log")
+                        - execute_ssh_command("dev-box", "docker ps", 60000)
+                        - execute_ssh_command("staging", "tail -n 100 /var/log/app.log")
+                        
+                        SECURITY:
+                        - Uses SSH public/private key authentication
+                        - Private keys must be accessible from the file system
+                        - Passphrase-protected keys are supported
+                        - No password authentication (security best practice)
+                        
+                        ${CMD_PREFIX_DESCRIPTION}`,
+                inputSchema: zodToJsonSchema(ExecuteSSHCommandArgsSchema),
+                annotations: {
+                    title: "Execute SSH Command",
+                    readOnlyHint: false,
+                    openWorldHint: true,
+                },
+            },
+            {
+                name: "list_ssh_credentials",
+                description: `
+                        List all configured SSH credentials (without exposing sensitive data).
+                        
+                        Returns available SSH connections with:
+                        - Credential name (used in execute_ssh_command)
+                        - Host (server address)
+                        - Username
+                        
+                        Use this tool before executing SSH commands to see what credentials are available.
+                        
+                        ${CMD_PREFIX_DESCRIPTION}`,
+                inputSchema: zodToJsonSchema(ListSSHCredentialsArgsSchema),
+                annotations: {
+                    title: "List SSH Credentials",
+                    readOnlyHint: true,
+                },
+            },
+            {
+                name: "test_ssh_connection",
+                description: `
+                        Test connectivity to a remote SSH server.
+                        
+                        Attempts to establish an SSH connection and execute a simple test command.
+                        Useful for verifying credentials and network connectivity before running commands.
+                        
+                        PARAMETERS:
+                        - credential_name: Name of the SSH credential to test
+                        
+                        Returns success/failure status with connection details or error message.
+                        
+                        ${CMD_PREFIX_DESCRIPTION}`,
+                inputSchema: zodToJsonSchema(TestSSHConnectionArgsSchema),
+                annotations: {
+                    title: "Test SSH Connection",
+                    readOnlyHint: true,
+                },
+            },
+            {
                 name: "get_usage_stats",
                 description: `
                         Get usage statistics for debugging and analysis.
@@ -1292,6 +1372,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
 
             case "kill_process":
                 result = await handlers.handleKillProcess(args);
+                break;
+
+            // SSH tools
+            case "execute_ssh_command":
+                result = await handlers.handleExecuteSSHCommand(args);
+                break;
+
+            case "list_ssh_credentials":
+                result = await handlers.handleListSSHCredentials(args);
+                break;
+
+            case "test_ssh_connection":
+                result = await handlers.handleTestSSHConnection(args);
                 break;
 
             // Note: REPL functionality removed in favor of using general terminal commands
