@@ -2,6 +2,7 @@ import { Client, ConnectConfig } from 'ssh2';
 import fs from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
+import os from 'os';
 import { configManager, SSHCredential } from './config-manager.js';
 import { capture } from './utils/capture.js';
 
@@ -60,7 +61,6 @@ export class SSHManager {
         // Resolve ~ to home directory if present
         let keyPath = credential.privateKeyPath;
         if (keyPath.startsWith('~/')) {
-          const os = require('os');
           keyPath = path.join(os.homedir(), keyPath.substring(2));
         }
         

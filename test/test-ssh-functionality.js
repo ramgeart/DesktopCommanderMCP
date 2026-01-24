@@ -19,7 +19,7 @@ async function testAddSSHCredentials() {
     port: 22,
     username: 'testuser',
     privateKeyPath: '~/.ssh/test_key',
-    passphrase: 'test_passphrase'
+    passphrase: '' // Empty passphrase for testing - in production use secure passphrases
   };
 
   // Add credentials to config
@@ -72,7 +72,7 @@ async function testMultipleCredentials() {
       port: 2222,
       username: 'user2',
       privateKeyPath: '~/.ssh/key2',
-      passphrase: 'secret'
+      passphrase: '' // Use empty string or secure environment variable in production
     }
   ];
   
