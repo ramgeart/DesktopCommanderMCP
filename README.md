@@ -39,7 +39,17 @@ Execute long-running terminal commands on your computer and manage processes thr
 ## Features
 
 - **Remote AI Control** - Use Desktop Commander from ChatGPT, Claude web, and other AI services via [Remote MCP](https://mcp.desktopcommander.app)
-- **SSH Remote Execution** - Execute commands on remote servers via SSH with secure key-based authentication ([Learn More](./SSH_REMOTE_EXECUTION.md))
+- **SSH Remote Execution** - Execute commands on remote servers via SSH with secure key-based authentication. Use with `--config` flag for external credentials file ([Learn More](./SSH_REMOTE_EXECUTION.md))
+  ```json
+  {
+    "mcpServers": {
+      "desktop-commander": {
+        "command": "npx",
+        "args": ["-y", "github:ramgeart/DesktopCommanderMCP", "--config", "ssh_servers.json"]
+      }
+    }
+  }
+  ```
 - **Enhanced terminal commands with interactive process control**
 - **Execute code in memory (Python, Node.js, R) without saving files**
 - **Instant data analysis - just ask to analyze CSV/JSON/Excel files**
