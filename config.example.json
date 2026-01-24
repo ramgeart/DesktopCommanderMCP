@@ -1,0 +1,43 @@
+{
+  "blockedCommands": [
+    "format",
+    "mount",
+    "umount",
+    "mkfs",
+    "fdisk",
+    "dd",
+    "sudo",
+    "su",
+    "passwd",
+    "adduser",
+    "useradd",
+    "usermod",
+    "groupadd"
+  ],
+  "sshCredentials": [
+    {
+      "name": "production-server",
+      "host": "prod.example.com",
+      "port": 22,
+      "username": "deploy",
+      "privateKeyPath": "~/.ssh/id_rsa",
+      "passphrase": "optional_passphrase_if_key_is_encrypted"
+    },
+    {
+      "name": "staging-server",
+      "host": "staging.example.com",
+      "port": 2222,
+      "username": "deploy",
+      "privateKeyPath": "~/.ssh/staging_key"
+    },
+    {
+      "name": "dev-server",
+      "host": "192.168.1.100",
+      "username": "developer",
+      "privateKeyPath": "/Users/username/.ssh/dev_key"
+    }
+  ],
+  "telemetryEnabled": true,
+  "fileWriteLineLimit": 50,
+  "fileReadLineLimit": 1000
+}
