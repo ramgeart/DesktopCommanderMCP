@@ -127,12 +127,14 @@ incus exec mcp-http -- sh -c 'cd /opt/bashun-commander && \
   MCP_HTTP_HOST=0.0.0.0 ./scripts/deploy-http.sh --no-serve \
   --host mcp-http.tailea1bd3.ts.net'
 
-# 5. Serve tailnet (:8443, bajo ACL) + Funnel propio (:443, público).
-#    Van en puertos distintos para convivir (funnel ocupa el 443).
-incus exec mcp-http -- tailscale serve --bg --https=8443 http://127.0.0.1:8080
+# 5. Funnel propio (:443, público) desde el container.
 incus exec mcp-http -- tailscale funnel --bg 8080
-# (el funnel nuevo puede pedir aprobación: habilitarlo + agregar el nodo
+# (puede pedir aprobación: habilitarlo + agregar el nodo
 #  en https://login.tailscale.com/f/funnel)
+#
+# Opcional, solo si se quiere además un endpoint solo-tailnet bajo ACL:
+# incus exec mcp-http -- tailscale serve --bg --https=8443 http://127.0.0.1:8080
+# (ver "Tailnet (ACL)" en TAILSCALE_ACL.md; hoy apagado, no se usa)
 
 # 6. Cutover: retirar el funnel/proxy/servicio viejos del host
 tailscale funnel --https=443 off

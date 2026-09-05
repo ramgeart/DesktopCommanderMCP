@@ -22,11 +22,17 @@ sed -i "s/^MCP_HTTP_TOKEN=.*/MCP_HTTP_TOKEN=$NEW/" /etc/mcp-http/env
 
 Luego actualizar el token en cada cliente (opencode/Claude/inspector).
 
-## 2. Tailnet (ACL) → `mcp-http:443`
+## 2. Tailnet (ACL) → reservado para más adelante
 
-`https://mcp-http.tailea1bd3.ts.net/mcp` (`tailscale serve` dentro del container).
-El Funnel **no** pasa por el ACL de tailnet; este path sí: sin grants, da timeout
-(aunque haya Bearer válido). Pegar en Admin → Access controls:
+El `serve` tailnet (`:8443`) está **apagado por ahora** (no se usa; era 100%
+interno, sin exposición pública). Si algún día se quiere acceso solo-tailnet
+además del Funnel:
+
+```bash
+incus exec mcp-http -- tailscale serve --bg --https=8443 http://127.0.0.1:8080
+```
+
+y pegar en Admin → Access controls:
 
 ```json
 {
@@ -40,15 +46,15 @@ El Funnel **no** pasa por el ACL de tailnet; este path sí: sin grants, da timeo
 }
 ```
 
-- `src`: quién consume el MCP. `n01grafr` está incluido para healthchecks y
+- `src`: quién consumiría el MCP por tailnet. `n01grafr` para healthchecks y
   verificación desde el host. Agregar tags/usuarios según corresponda
   (ej: `"tag:llm-clients"`); mínimo privilegio.
-- `dst: ["mcp-http"]` = el nodo container (`100.89.187.122`). Solo puerto 8443
-  (serve tailnet; el Funnel va por 443 público, fuera del ACL).
+- `dst: ["mcp-http"]` = el nodo container (`100.89.187.122`). Solo el puerto del
+  serve que se habilite (ej: 8443).
 - Sintaxis legacy equivalente:
   `{"action": "accept", "src": ["ramgeart@", "n01grafr"], "dst": ["mcp-http:8443"]}`
 
-### Verificar tras aplicar el ACL (desde un origen permitido)
+### Verificar el path tailnet (cuando se habilite)
 
 ```bash
 T=$(grep MCP_HTTP_TOKEN /etc/mcp-http/env | cut -d= -f2)
@@ -57,12 +63,11 @@ curl -s https://mcp-http.tailea1bd3.ts.net:8443/healthz
 # Authorization: Bearer $T, igual que contra el Funnel (cambia solo host:puerto)
 ```
 
-## Topología actual (Funnel propio + un serve tailnet, todo en el container)
+## Topología actual (solo Funnel + LAN operativa)
 
 | Path | TLS | Auth | Pasa por ACL tailnet |
 |---|---|---|---|
 | Internet → Funnel en `mcp-http` (`:443`) | Funnel | Bearer | No: el Funnel es internet público por diseño, no acepta grants; su auth es el Bearer. |
-| Tailnet → `mcp-http:8443` (serve en container) | Tailscale | Bearer + grants de arriba | **Sí** |
 | Host → `10.150.119.65:8080` (LAN Incus, operativas) | No | Bearer | No (red del hipervisor) |
 
 > El host quedó fuera del path: sin funnel, sin proxy, sin servicio local
