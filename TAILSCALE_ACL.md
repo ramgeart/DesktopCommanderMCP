@@ -56,10 +56,15 @@ curl -s https://mcp-http.tailea1bd3.ts.net/healthz
 # Authorization: Bearer $T, igual que contra el Funnel
 ```
 
-## Topología actual
+## Topología actual (un path público, un path tailnet)
 
 | Path | TLS | Auth | Pasa por ACL tailnet |
 |---|---|---|---|
-| Internet → Funnel host → proxy → `mcp-http:8080` | Funnel | Bearer | No (feature del nodo, ya aprobada) |
-| Tailnet → `mcp-http:443` (serve en container) | Tailscale | Bearer + grants de arriba | **Sí** |
-| Host → `10.150.119.65:8080` (LAN Incus) | No | Bearer | No (red del hipervisor) |
+| Internet → Funnel en host → proxy → `mcp-http:8080` | Funnel | Bearer | No: el Funnel es internet público por diseño, no acepta grants; su auth es el Bearer. Ya aprobado para este nodo. |
+| Tailnet → `mcp-http:443` (serve en container) | Tailscale | Bearer + grants de abajo | **Sí** |
+| Host → `10.150.119.65:8080` (LAN Incus, operativas) | No | Bearer | No (red del hipervisor) |
+
+> El `serve` tailnet del host se apagó a propósito (`tailscale serve
+> --https=443 off`; ojo: ese comando también voltea el funnel, reactivarlo
+> después con `tailscale funnel --bg 8080`). Así hay un solo endpoint tailnet
+> (`mcp-http`) y un solo endpoint público (Funnel), sin superficies duplicadas.
