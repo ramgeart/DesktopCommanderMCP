@@ -43,11 +43,11 @@ const PORT = parseInt(process.env.MCP_HTTP_PORT || '8080', 10);
 const HOST = process.env.MCP_HTTP_HOST || '127.0.0.1';
 const MCP_PATH = process.env.MCP_HTTP_PATH || '/mcp';
 const BODY_LIMIT = process.env.MCP_HTTP_BODY_LIMIT || '10mb';
-const MAX_SESSIONS = parseInt(process.env.MCP_HTTP_MAX_SESSIONS || '20', 10);
-// TTL de inactividad por sesión (default 15 min). Los clientes bien portados
+const MAX_SESSIONS = parseInt(process.env.MCP_HTTP_MAX_SESSIONS || '50', 10);
+// TTL de inactividad por sesión (default 5 min). Los clientes bien portados
 // mandan DELETE al terminar, pero los scanners a veces no lo hacen y las
 // sesiones filtradas agotarían MAX_SESSIONS (→ 503). 0 = sin expiración.
-const SESSION_TTL_MS = parseInt(process.env.MCP_HTTP_SESSION_TTL_MS || '900000', 10);
+const SESSION_TTL_MS = parseInt(process.env.MCP_HTTP_SESSION_TTL_MS || '300000', 10);
 const TOKEN = process.env.MCP_HTTP_TOKEN || '';
 const NO_AUTH = process.env.MCP_HTTP_NO_AUTH === '1';
 
@@ -208,6 +208,71 @@ async function runHttpServer(): Promise<void> {
         app.use(express.json({ limit: BODY_LIMIT }));
         // No exponer fingerprint innecesario.
         app.disable('x-powered-by');
+
+        // Log de requests MCP (debug forense). MCP_HTTP_DEBUG=1. Nunca loguea
+        // el Authorization header ni bodies completos (pueden traer datos).
+        const DEBUG = process.env.MCP_HTTP_DEBUG === '1';
+        if (DEBUG) {
+            app.use(MCP_PATH, (req, _res, next) => {
+                const body = req.body as unknown;
+                const msg = Array.isArray(body)
+                    ? `batch[${body.length}](${(body as Array<{ method?: unknown }>).map((m) => String(m?.method)).join(',')})`
+                    : `method=${String((body as { method?: unknown } | null)?.method)} id=${String((body as { id?: unknown } | null)?.id)}`;
+                const rpc = (body && typeof body === 'object' ? body : {}) as {
+                    params?: { protocolVersion?: unknown; clientInfo?: { name?: unknown }; name?: unknown };
+                };
+                const pv = rpc.params?.protocolVersion;
+                const cn = rpc.params?.clientInfo?.name;
+                // Para tools/call se loguea el nombre de la tool (no los argumentos).
+                const tool = (body as { method?: unknown } | null)?.method === 'tools/call'
+                    ? ` tool=${String(rpc.params?.name ?? '?')}` : '';
+                logger.info(`MCP ${req.method} proto=${req.headers['mcp-protocol-version'] ?? '-'} sid=${req.headers['mcp-session-id'] ?? '-'} ${msg}${pv ? ` pv=${String(pv)}` : ''}${cn ? ` client=${String(cn)}` : ''}${tool} accept=${String(req.headers.accept ?? '-')} ua=${String(req.headers['user-agent'] ?? '-').slice(0, 80)}`);
+                next();
+            });
+        }
+
+        // El adaptador @hono/node-server del SDK pone Content-Length a todo body
+        // string, incluido el SSE (text/event-stream). Un stream con Content-Length
+        // es contradictorio y clientes estrictos (ej: el conector de OpenAI) lo
+        // dan por conexión rota ("Connection failed" tras el auth). Se quita el
+        // header en respuestas SSE para que Node use chunked (framing correcto).
+        const stripSseContentLength: express.RequestHandler = (_req, res, next) => {
+            const origWriteHead = res.writeHead.bind(res);
+            res.writeHead = ((statusCode: number, ...args: unknown[]): unknown => {
+                let headers: unknown;
+                let headerIndex = -1;
+                if (args.length === 2 && typeof args[1] === 'object' && args[1] !== null) {
+                    headerIndex = 1;
+                    headers = args[1];
+                } else if (args.length === 1 && typeof args[0] === 'object' && args[0] !== null) {
+                    headerIndex = 0;
+                    headers = args[0];
+                }
+                if (headerIndex >= 0 && headers !== undefined) {
+                    const entries: Array<[string, unknown]> = Array.isArray(headers)
+                        ? (headers as Array<[string, unknown]>)
+                        : Object.entries(headers as Record<string, unknown>);
+                    const isSse = entries.some(([name, value]) =>
+                        name.toLowerCase() === 'content-type' &&
+                        String(value).includes('text/event-stream'));
+                    if (isSse) {
+                        if (Array.isArray(headers)) {
+                            (args as unknown[])[headerIndex] = (headers as Array<[string, unknown]>)
+                                .filter(([name]) => name.toLowerCase() !== 'content-length');
+                        } else {
+                            for (const name of Object.keys(headers as Record<string, unknown>)) {
+                                if (name.toLowerCase() === 'content-length') {
+                                    delete (headers as Record<string, unknown>)[name];
+                                }
+                            }
+                        }
+                    }
+                }
+                return (origWriteHead as (...a: unknown[]) => unknown)(statusCode, ...args);
+            }) as typeof res.writeHead;
+            next();
+        };
+        app.use(MCP_PATH, stripSseContentLength);
 
         // Healthcheck abierto (para el Funnel / uptime-kuma). No expone nada sensible.
         app.get('/healthz', (_req, res) => {

@@ -52,7 +52,8 @@ export const ReadFileArgsSchema = z.object({
   length: z.number().optional().default(1000),
   sheet: z.string().optional(),  // String only for MCP client compatibility (Cursor doesn't support union types in JSON Schema)
   range: z.string().optional(),
-  options: z.record(z.any()).optional()
+  // NOTE: no hay `options` a propósito: el handler lo ignora y un record libre
+  // emite un schema booleano desnudo que rompe importadores estrictos (OpenAI).
 });
 
 export const ReadMultipleFilesArgsSchema = z.object({
@@ -135,8 +136,18 @@ export const EditBlockArgsSchema = z.object({
   expected_replacements: z.number().optional().default(1),
   // Structured file range rewrite (Excel, etc.)
   range: z.string().optional(),
-  content: z.any().optional(),
-  options: z.record(z.any()).optional()
+  // Tipos explícitos (nunca z.any): los schemas booleanos desnudos rompen
+  // importadores estrictos (OpenAI). El handler además acepta el array como
+  // string JSON y lo parsea solo.
+  content: z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.null(),
+    z.array(z.array(z.union([z.string(), z.number(), z.boolean(), z.null()]))),
+    z.record(z.union([z.string(), z.number(), z.boolean(), z.null()])),
+  ]).optional(),
+  options: z.record(z.union([z.string(), z.number(), z.boolean(), z.null()])).optional()
 }).refine(
   data => {
     // Helper to check if value is actually provided (not undefined, not empty string)

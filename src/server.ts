@@ -218,6 +218,29 @@ server.setRequestHandler(InitializeRequestSchema, async (request: InitializeRequ
 deferLog('info', 'Setting up request handlers...');
 
 /**
+ * Normaliza un JSON Schema para clientes estrictos: convierte `type: [...]`
+ * (forma array, legal pero rechazada por varios importadores MCP como el de
+ * OpenAI) en ramas anyOf de un solo tipo. Semánticamente idéntico.
+ */
+function normalizeStrictSchema(node: unknown): unknown {
+    if (Array.isArray(node)) return node.map(normalizeStrictSchema);
+    if (node === null || typeof node !== 'object') return node;
+    const obj = node as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(obj)) {
+        if (key === 'type') continue; // se repone abajo
+        out[key] = normalizeStrictSchema(value);
+    }
+    const typeValue = obj.type;
+    if (Array.isArray(typeValue) && typeValue.every((t) => typeof t === 'string')) {
+        out.anyOf = (typeValue as string[]).map((t) => ({ type: t }));
+    } else if (typeValue !== undefined) {
+        out.type = typeValue;
+    }
+    return out;
+}
+
+/**
  * Check if a tool should be included based on current client
  */
 function shouldIncludeTool(toolName: string): boolean {
@@ -1172,7 +1195,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         // logToStderr('debug', `Returning ${filteredTools.length} tools (filtered from ${allTools.length} total) for client: ${currentClient?.name || 'unknown'}`);
 
         return {
-            tools: filteredTools,
+            tools: filteredTools.map((tool) => ({
+                ...tool,
+                inputSchema: normalizeStrictSchema(tool.inputSchema),
+            })),
         };
     } catch (error) {
         logToStderr('error', `Error in list_tools request handler: ${error}`);

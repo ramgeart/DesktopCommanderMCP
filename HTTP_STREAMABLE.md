@@ -64,8 +64,8 @@ Códigos que implementa (vía SDK): `401` sin token · `400` request sin sesión
 | `MCP_HTTP_PORT` | `8080` | Puerto de escucha. |
 | `MCP_HTTP_HOST` | `127.0.0.1` | Interfaz de escucha. No usar `0.0.0.0` salvo que sepas lo que hacés. |
 | `MCP_HTTP_PATH` | `/mcp` | Ruta del endpoint MCP (`POST` + `GET` + `DELETE`). |
-| `MCP_HTTP_MAX_SESSIONS` | `20` | Máximo de sesiones concurrentes. Superado → `503`. Cada sesión tiene su propia instancia del Server (aisladas entre sí; un `DELETE` solo cierra la propia). |
-| `MCP_HTTP_SESSION_TTL_MS` | `900000` (15 min) | Expira sesiones sin actividad (scanners que nunca mandan `DELETE`). `0` = sin expiración. |
+| `MCP_HTTP_MAX_SESSIONS` | `50` | Máximo de sesiones concurrentes. Superado → `503`. Cada sesión tiene su propia instancia del Server (aisladas entre sí; un `DELETE` solo cierra la propia). |
+| `MCP_HTTP_SESSION_TTL_MS` | `300000` (5 min) | Expira sesiones sin actividad (scanners que nunca mandan `DELETE`). `0` = sin expiración. |
 | `MCP_HTTP_BODY_LIMIT` | `10mb` | Límite del body JSON (hay tools que mueven archivos enteros). |
 | `MCP_HTTP_ALLOWED_HOSTS` | `127.0.0.1,localhost` (+ puerto) | Hosts extra para la protección anti-rebinding. **Tras Funnel hay que agregar `<nodo>.ts.net`** (el header `Host` debe matchear exacto o todo da `400`). |
 | `MCP_HTTP_ALLOWED_ORIGINS` | *(sin chequear)* | Origins de navegador permitidos. Si se define, cualquier request con `Origin` fuera de la lista se rechaza. Clientes API no mandan `Origin`, no les afecta. |
