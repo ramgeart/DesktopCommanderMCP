@@ -97,37 +97,55 @@ y deja andando el `serve` de tailnet.
 
 ### Variante: servicio en un container Incus (Debian 13)
 
-Así corre en producción: el servicio vive en el container `mcp-http` y el host
-solo hace proxy + tailscale. El Funnel/serve **no se toca** (siguen apuntando a
-`127.0.0.1:8080` del host).
+Así corre en producción: servicio + tailscaled + serve/funnel viven en el
+container `mcp-http`, con su propia identidad tailnet (bajo el ACL). El host no
+participa del path (su funnel/proxy/servicio se retiraron tras el cutover).
 
 ```bash
-# 1. Container + Node (los binarios del repo piden node >= 18)
+# 1. Container + Node (los binarios del repo piden node >= 18) + TUN para tailscale
 incus launch images:debian/13 mcp-http --config boot.autostart=true
+incus config device add mcp-http tun unix-char path=/dev/net/tun
+incus restart mcp-http   # el TUN necesita restart para montarse
 incus exec mcp-http -- apt-get update
 incus exec mcp-http -- apt-get install -y git curl openssl nodejs npm
 
-# 2. Código + mismo token del host (los clientes no cambian)
+# 2. Tailscale dentro (repo oficial) + login (imprime URL de aprobación una sola vez)
+incus exec mcp-http -- sh -c 'curl -fsSL https://pkgs.tailscale.com/stable/debian/trixie.noarmor.gpg -o /usr/share/keyrings/tailscale-archive-keyring.gpg'
+incus exec mcp-http -- sh -c 'curl -fsSL https://pkgs.tailscale.com/stable/debian/trixie.tailscale-keyring.list -o /etc/apt/sources.list.d/tailscale.list'
+incus exec mcp-http -- sh -c 'apt-get update && apt-get install -y tailscale'
+incus exec mcp-http -- tailscale login   # aprobar en la URL que imprime
+
+# 3. Código + mismo token del host (los clientes no cambian)
 incus exec mcp-http -- git clone --depth 1 \
   https://github.com/ramgeart/DesktopCommanderMCP.git /opt/bashun-commander
 incus exec mcp-http -- mkdir -p /etc/mcp-http
 incus file push /etc/mcp-http/env mcp-http/etc/mcp-http/env
 
-# 3. Deploy dentro (sin serve/funnel: los expone el host).
-#    OJO: MCP_HTTP_HOST=0.0.0.0, el proxy del host entra por la eth0 del container
+# 4. Deploy dentro (sin serve/funnel del host).
+#    OJO: MCP_HTTP_HOST=0.0.0.0 para servir a tailscaled + red Incus
 incus exec mcp-http -- sh -c 'cd /opt/bashun-commander && \
   MCP_HTTP_HOST=0.0.0.0 ./scripts/deploy-http.sh --no-serve \
-  --host n01grafr.tailea1bd3.ts.net'
+  --host mcp-http.tailea1bd3.ts.net'
 
-# 4. Cutover en el host: frenar el servicio local y proxyar al container
+# 5. Serve tailnet (:8443, bajo ACL) + Funnel propio (:443, público).
+#    Van en puertos distintos para convivir (funnel ocupa el 443).
+incus exec mcp-http -- tailscale serve --bg --https=8443 http://127.0.0.1:8080
+incus exec mcp-http -- tailscale funnel --bg 8080
+# (el funnel nuevo puede pedir aprobación: habilitarlo + agregar el nodo
+#  en https://login.tailscale.com/f/funnel)
+
+# 6. Cutover: retirar el funnel/proxy/servicio viejos del host
+tailscale funnel --https=443 off
+incus config device remove mcp-http proxy8080
 systemctl stop mcp-http && systemctl disable mcp-http
-incus config device add mcp-http proxy8080 proxy \
-  listen=tcp:127.0.0.1:8080 connect=tcp:10.150.119.65:8080
-curl -s http://127.0.0.1:8080/healthz
 ```
 
-Rollback: `incus config device remove mcp-http proxy8080` +
-`systemctl enable --now mcp-http` en el host (el checkout de `/root` sigue ahí).
+URLs finales: público `https://mcp-http.tailea1bd3.ts.net/mcp` (Funnel+Bearer),
+tailnet `https://mcp-http.tailea1bd3.ts.net:8443/mcp` (Bearer+grants, ver
+`TAILSCALE_ACL.md`).
+
+Rollback: re-agregar el proxy + `systemctl enable --now mcp-http` en el host
+(el checkout de `/root` sigue ahí) y `tailscale funnel --bg 8080` en el host.
 
 ### Manual (lo que hace el script, paso a paso)
 

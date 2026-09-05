@@ -34,7 +34,7 @@ El Funnel **no** pasa por el ACL de tailnet; este path sí: sin grants, da timeo
     {
       "src": ["ramgeart@", "n01grafr"],
       "dst": ["mcp-http"],
-      "ip": ["tcp:443"]
+      "ip": ["tcp:8443"]
     }
   ]
 }
@@ -43,28 +43,28 @@ El Funnel **no** pasa por el ACL de tailnet; este path sí: sin grants, da timeo
 - `src`: quién consume el MCP. `n01grafr` está incluido para healthchecks y
   verificación desde el host. Agregar tags/usuarios según corresponda
   (ej: `"tag:llm-clients"`); mínimo privilegio.
-- `dst: ["mcp-http"]` = el nodo container (`100.89.187.122`). Solo puerto 443.
+- `dst: ["mcp-http"]` = el nodo container (`100.89.187.122`). Solo puerto 8443
+  (serve tailnet; el Funnel va por 443 público, fuera del ACL).
 - Sintaxis legacy equivalente:
-  `{"action": "accept", "src": ["ramgeart@", "n01grafr"], "dst": ["mcp-http:443"]}`
+  `{"action": "accept", "src": ["ramgeart@", "n01grafr"], "dst": ["mcp-http:8443"]}`
 
 ### Verificar tras aplicar el ACL (desde un origen permitido)
 
 ```bash
 T=$(grep MCP_HTTP_TOKEN /etc/mcp-http/env | cut -d= -f2)
-curl -s https://mcp-http.tailea1bd3.ts.net/healthz
+curl -s https://mcp-http.tailea1bd3.ts.net:8443/healthz
 # ciclo initialize → notifications (202) → tools/call → DELETE (200) con
-# Authorization: Bearer $T, igual que contra el Funnel
+# Authorization: Bearer $T, igual que contra el Funnel (cambia solo host:puerto)
 ```
 
-## Topología actual (un path público, un path tailnet)
+## Topología actual (Funnel propio + un serve tailnet, todo en el container)
 
 | Path | TLS | Auth | Pasa por ACL tailnet |
 |---|---|---|---|
-| Internet → Funnel en host → proxy → `mcp-http:8080` | Funnel | Bearer | No: el Funnel es internet público por diseño, no acepta grants; su auth es el Bearer. Ya aprobado para este nodo. |
-| Tailnet → `mcp-http:443` (serve en container) | Tailscale | Bearer + grants de abajo | **Sí** |
+| Internet → Funnel en `mcp-http` (`:443`) | Funnel | Bearer | No: el Funnel es internet público por diseño, no acepta grants; su auth es el Bearer. |
+| Tailnet → `mcp-http:8443` (serve en container) | Tailscale | Bearer + grants de arriba | **Sí** |
 | Host → `10.150.119.65:8080` (LAN Incus, operativas) | No | Bearer | No (red del hipervisor) |
 
-> El `serve` tailnet del host se apagó a propósito (`tailscale serve
-> --https=443 off`; ojo: ese comando también voltea el funnel, reactivarlo
-> después con `tailscale funnel --bg 8080`). Así hay un solo endpoint tailnet
-> (`mcp-http`) y un solo endpoint público (Funnel), sin superficies duplicadas.
+> El host quedó fuera del path: sin funnel, sin proxy, sin servicio local
+> (queda apagado como rollback). El Funnel corre con la identidad del propio
+> nodo `mcp-http`, bajo tu ACL como cualquier server.
