@@ -14,6 +14,17 @@
 npx ramgeart/bashun-commander@latest setup
 ```
 
+## Servidor remoto (Streamable HTTP, spec 2025-03-26)
+
+El mismo servidor también se expone por HTTP para uso detrás de un Tailscale
+Funnel, con auth por Bearer token. Ver [HTTP_STREAMABLE.md](HTTP_STREAMABLE.md).
+
+```bash
+npm run build
+MCP_HTTP_TOKEN="$(openssl rand -hex 32)" npm run serve:http
+# http://127.0.0.1:8080/mcp  (+ /healthz)
+```
+
 (Próximamente rename a bashun-commander oficial)
 
 ---

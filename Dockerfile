@@ -20,7 +20,11 @@ COPY . .
 # Build the application
 RUN npm run build
 
-# Expose port if needed (not specified, so using none)
+# Expose Streamable HTTP port (solo se usa en modo http: `node dist/http.js`).
+EXPOSE 8080
 
-# Command to run the server
+# Command to run the server (modo stdio por defecto).
+# Modo HTTP tras Tailscale Funnel:
+#   docker run -e MCP_HTTP_TOKEN=<token> -e MCP_HTTP_ALLOWED_HOSTS=<nodo>.ts.net \
+#     -p 127.0.0.1:8080:8080 <img> node dist/http.js
 CMD [ "node", "dist/index.js" ]
