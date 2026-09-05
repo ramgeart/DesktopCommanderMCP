@@ -113,6 +113,11 @@ fi
 mkdir -p "$(dirname "$ENV_FILE")"
 ALLOWED="$TAIL_HOST"
 [ -z "$EXTRA_HOSTS" ] || ALLOWED="$ALLOWED,$EXTRA_HOSTS"
+# IPs locales (con y sin puerto, el header Host trae :PUERTO): acceso directo
+# por IP de tailnet/eth0 sin aflojar la protección anti DNS-rebinding.
+for ip in $(hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^[0-9.]+$' | grep -v '^127\.'); do
+  ALLOWED="$ALLOWED,$ip,$ip:$PORT"
+done
 printf 'MCP_HTTP_TOKEN=%s\nMCP_HTTP_PORT=%s\nMCP_HTTP_HOST=%s\nMCP_HTTP_ALLOWED_HOSTS=%s\n' \
   "$TOKEN" "$PORT" "$BIND" "$ALLOWED" > "$ENV_FILE"
 chmod 600 "$ENV_FILE"
