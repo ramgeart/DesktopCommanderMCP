@@ -95,6 +95,40 @@ El Funnel requiere dos permisos previos en la consola admin (una sola vez):
 tailnet **y** agregar el nodo a la lista de permitidos. Sin eso el script avisa
 y deja andando el `serve` de tailnet.
 
+### Variante: servicio en un container Incus (Debian 13)
+
+Así corre en producción: el servicio vive en el container `mcp-http` y el host
+solo hace proxy + tailscale. El Funnel/serve **no se toca** (siguen apuntando a
+`127.0.0.1:8080` del host).
+
+```bash
+# 1. Container + Node (los binarios del repo piden node >= 18)
+incus launch images:debian/13 mcp-http --config boot.autostart=true
+incus exec mcp-http -- apt-get update
+incus exec mcp-http -- apt-get install -y git curl openssl nodejs npm
+
+# 2. Código + mismo token del host (los clientes no cambian)
+incus exec mcp-http -- git clone --depth 1 \
+  https://github.com/ramgeart/DesktopCommanderMCP.git /opt/bashun-commander
+incus exec mcp-http -- mkdir -p /etc/mcp-http
+incus file push /etc/mcp-http/env mcp-http/etc/mcp-http/env
+
+# 3. Deploy dentro (sin serve/funnel: los expone el host).
+#    OJO: MCP_HTTP_HOST=0.0.0.0, el proxy del host entra por la eth0 del container
+incus exec mcp-http -- sh -c 'cd /opt/bashun-commander && \
+  MCP_HTTP_HOST=0.0.0.0 ./scripts/deploy-http.sh --no-serve \
+  --host n01grafr.tailea1bd3.ts.net'
+
+# 4. Cutover en el host: frenar el servicio local y proxyar al container
+systemctl stop mcp-http && systemctl disable mcp-http
+incus config device add mcp-http proxy8080 proxy \
+  listen=tcp:127.0.0.1:8080 connect=tcp:10.150.119.65:8080
+curl -s http://127.0.0.1:8080/healthz
+```
+
+Rollback: `incus config device remove mcp-http proxy8080` +
+`systemctl enable --now mcp-http` en el host (el checkout de `/root` sigue ahí).
+
 ### Manual (lo que hace el script, paso a paso)
 
 **1. Build**
