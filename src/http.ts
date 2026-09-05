@@ -44,6 +44,10 @@ const HOST = process.env.MCP_HTTP_HOST || '127.0.0.1';
 const MCP_PATH = process.env.MCP_HTTP_PATH || '/mcp';
 const BODY_LIMIT = process.env.MCP_HTTP_BODY_LIMIT || '10mb';
 const MAX_SESSIONS = parseInt(process.env.MCP_HTTP_MAX_SESSIONS || '20', 10);
+// TTL de inactividad por sesión (default 15 min). Los clientes bien portados
+// mandan DELETE al terminar, pero los scanners a veces no lo hacen y las
+// sesiones filtradas agotarían MAX_SESSIONS (→ 503). 0 = sin expiración.
+const SESSION_TTL_MS = parseInt(process.env.MCP_HTTP_SESSION_TTL_MS || '900000', 10);
 const TOKEN = process.env.MCP_HTTP_TOKEN || '';
 const NO_AUTH = process.env.MCP_HTTP_NO_AUTH === '1';
 
@@ -91,6 +95,7 @@ function isInitBody(body: unknown): boolean {
 interface Session {
     server: Server;
     transport: StreamableHTTPServerTransport;
+    lastSeen: number;
 }
 
 async function runHttpServer(): Promise<void> {
@@ -151,6 +156,7 @@ async function runHttpServer(): Promise<void> {
                     const pair = pendingPairs.get(transport);
                     pendingPairs.delete(transport);
                     if (pair) {
+                        pair.lastSeen = Date.now();
                         sessions.set(sessionId, pair);
                         logger.info(`MCP HTTP session initialized: ${sessionId} (${sessions.size} activas)`);
                     }
@@ -169,10 +175,23 @@ async function runHttpServer(): Promise<void> {
         // al procesar el initialize). Se mueven a `sessions` en onsessioninitialized.
         const pendingPairs = new Map<StreamableHTTPServerTransport, Session>();
 
+        // Limpieza de sesiones inactivas (scanners que nunca mandan DELETE).
+        if (SESSION_TTL_MS > 0) {
+            setInterval(() => {
+                const now = Date.now();
+                for (const [id, pair] of sessions) {
+                    if (now - pair.lastSeen > SESSION_TTL_MS) {
+                        logger.info(`MCP HTTP session expired by idle TTL: ${id}`);
+                        void closeSession(id);
+                    }
+                }
+            }, 60000).unref();
+        }
+
         async function createSession(): Promise<StreamableHTTPServerTransport> {
             const mcpServer = createMcpServer();
             const transport = makeTransport();
-            pendingPairs.set(transport, { server: mcpServer, transport });
+            pendingPairs.set(transport, { server: mcpServer, transport, lastSeen: Date.now() });
             try {
                 await mcpServer.connect(transport);
             } catch (error) {
@@ -205,6 +224,13 @@ async function runHttpServer(): Promise<void> {
         };
 
         const forward = (transport: StreamableHTTPServerTransport, req: express.Request, res: express.Response, body?: unknown): void => {
+            // Marcar actividad (frena el TTL de inactividad).
+            for (const pair of sessions.values()) {
+                if (pair.transport === transport) {
+                    pair.lastSeen = Date.now();
+                    break;
+                }
+            }
             transport.handleRequest(req, res, body).catch((error) => {
                 logger.error(`Error handling MCP request: ${error instanceof Error ? error.message : String(error)}`);
                 if (!res.headersSent) {

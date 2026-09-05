@@ -25,10 +25,11 @@ export interface UiToolMeta extends Record<string, unknown> {
   'openai/widgetAccessible'?: boolean;
 }
 
-export function buildUiToolMeta(resourceUri: string, widgetAccessible = false): UiToolMeta {
-  // Sin widgets anunciados, no referenciar plantillas (el scanner de OpenAI
-  // las detecta vía _meta y exige CSP + dominio por plantilla).
-  if (!isUiEnabled()) return {} as UiToolMeta;
+export function buildUiToolMeta(resourceUri: string, widgetAccessible = false): UiToolMeta | undefined {
+  // Sin widgets anunciados, OMITIR _meta por completo (ni siquiera {} vacío:
+  // algunos importadores estrictos —ej: el de OpenAI— tratan el objeto vacío
+  // como plantilla a medio declarar y fallan el scan).
+  if (!isUiEnabled()) return undefined;
   const meta: UiToolMeta = {
     'ui/resourceUri': resourceUri,
     'openai/outputTemplate': resourceUri,
