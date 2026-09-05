@@ -53,8 +53,10 @@ die() { echo "ERROR: $*" >&2; exit 1; }
 
 [ "$(id -u)" -eq 0 ] || die "correr como root (sudo)"
 command -v node >/dev/null || die "node no encontrado"
-command -v tailscale >/dev/null || die "tailscale no encontrado"
 command -v openssl >/dev/null || die "openssl no encontrado"
+if [ "$WANT_SERVE" -eq 1 ] || [ "$WANT_FUNNEL" -eq 1 ]; then
+  command -v tailscale >/dev/null || die "tailscale no encontrado (o usar --no-serve sin --funnel)"
+fi
 [ -f "$APP_DIR/package.json" ] || die "no hay package.json en $APP_DIR"
 [ -f "$APP_DIR/src/http.ts" ] || die "no hay src/http.ts en $APP_DIR (¿repo desactualizado?)"
 node -e "const [m,M]=process.versions.node.split('.').map(Number); if (m<18){process.exit(1)}" \
@@ -84,8 +86,13 @@ fi
 
 # --- 2. hostname tailnet (para allowedHosts + URLs) ---------------------------
 TAIL_HOST="$HOST_ARG"
-if [ -z "$TAIL_HOST" ]; then
+if [ -z "$TAIL_HOST" ] && command -v tailscale >/dev/null; then
   TAIL_HOST="$(tailscale status --json 2>/dev/null | grep -o '"DNSName": *"[^"]*"' | head -n 1 | cut -d'"' -f4 | sed 's/\.$//')"
+fi
+if [ -z "$TAIL_HOST" ]; then
+  # Sin tailscaled (ej: dentro de un container Incus, donde serve/funnel los
+  # expone el host): usar el primer host permitido como referencia.
+  TAIL_HOST="$(echo "$EXTRA_HOSTS" | cut -d, -f1 | xargs)"
 fi
 [ -n "$TAIL_HOST" ] || die "no pude detectar el hostname tailnet (¿tailscale logueado?). Pasalo con --host"
 
