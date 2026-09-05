@@ -25,6 +25,7 @@ APP_DIR="${APP_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 ENV_FILE="${ENV_FILE:-/etc/mcp-http/env}"
 SERVICE="${SERVICE:-mcp-http}"
 PORT="${MCP_HTTP_PORT:-8080}"
+BIND="${MCP_HTTP_HOST:-127.0.0.1}"
 WANT_SERVE=1
 WANT_FUNNEL=0
 SKIP_INSTALL=0
@@ -112,8 +113,8 @@ fi
 mkdir -p "$(dirname "$ENV_FILE")"
 ALLOWED="$TAIL_HOST"
 [ -z "$EXTRA_HOSTS" ] || ALLOWED="$ALLOWED,$EXTRA_HOSTS"
-printf 'MCP_HTTP_TOKEN=%s\nMCP_HTTP_PORT=%s\nMCP_HTTP_ALLOWED_HOSTS=%s\n' \
-  "$TOKEN" "$PORT" "$ALLOWED" > "$ENV_FILE"
+printf 'MCP_HTTP_TOKEN=%s\nMCP_HTTP_PORT=%s\nMCP_HTTP_HOST=%s\nMCP_HTTP_ALLOWED_HOSTS=%s\n' \
+  "$TOKEN" "$PORT" "$BIND" "$ALLOWED" > "$ENV_FILE"
 chmod 600 "$ENV_FILE"
 log "env escrito en $ENV_FILE (600)"
 
