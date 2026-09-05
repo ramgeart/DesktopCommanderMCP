@@ -145,8 +145,10 @@ NoNewPrivileges=true
 WantedBy=multi-user.target
 EOF
 systemctl daemon-reload
-systemctl enable --now "$SERVICE" >/dev/null
-log "systemd: $SERVICE habilitado y arrancado"
+systemctl enable "$SERVICE" >/dev/null
+# restart (no solo start): enable --now no recarga env/unidad en un servicio ya activo
+systemctl restart "$SERVICE"
+log "systemd: $SERVICE habilitado y (re)arrancado"
 
 # --- 6. healthcheck local ------------------------------------------------------
 for i in $(seq 1 15); do
