@@ -64,7 +64,7 @@ Códigos que implementa (vía SDK): `401` sin token · `400` request sin sesión
 | `MCP_HTTP_PORT` | `8080` | Puerto de escucha. |
 | `MCP_HTTP_HOST` | `127.0.0.1` | Interfaz de escucha. No usar `0.0.0.0` salvo que sepas lo que hacés. |
 | `MCP_HTTP_PATH` | `/mcp` | Ruta del endpoint MCP (`POST` + `GET` + `DELETE`). |
-| `MCP_HTTP_STATELESS` | *(off)* | `=1` desactiva sesiones (`Mcp-Session-Id`). Útil si el cliente no guarda sesión; se pierde `GET` standalone por sesión. |
+| `MCP_HTTP_MAX_SESSIONS` | `20` | Máximo de sesiones concurrentes. Superado → `503`. Cada sesión tiene su propia instancia del Server (aisladas entre sí; un `DELETE` solo cierra la propia). |
 | `MCP_HTTP_BODY_LIMIT` | `10mb` | Límite del body JSON (hay tools que mueven archivos enteros). |
 | `MCP_HTTP_ALLOWED_HOSTS` | `127.0.0.1,localhost` (+ puerto) | Hosts extra para la protección anti-rebinding. **Tras Funnel hay que agregar `<nodo>.ts.net`** (el header `Host` debe matchear exacto o todo da `400`). |
 | `MCP_HTTP_ALLOWED_ORIGINS` | *(sin chequear)* | Origins de navegador permitidos. Si se define, cualquier request con `Origin` fuera de la lista se rechaza. Clientes API no mandan `Origin`, no les afecta. |
@@ -144,9 +144,13 @@ Cualquier cliente MCP con transporte Streamable HTTP:
 
 ## Limitaciones conocidas
 
-- **Estado compartido:** una sola instancia `server` atiende todas las sesiones
-  HTTP (config, sesiones de procesos, búsquedas). Bien para uso unipersonal
-  tras Funnel; no es multi-tenant.
+- **Sesiones aisladas, config compartida:** cada `Mcp-Session-Id` tiene su
+  propia instancia del Server (un `DELETE` no afecta a las demás), pero la
+  configuración, el historial de tools y las stats de uso son globales al
+  proceso. Bien para uso unipersonal tras Funnel; no es multi-tenant.
+- **Sesiones sin `DELETE` quedan en memoria** hasta el tope
+  (`MCP_HTTP_MAX_SESSIONS`, luego `503`). Los clientes bien portados mandan
+  `DELETE` al terminar.
 - **Sin resumabilidad:** no se configura `eventStore`, así que no hay replay con
   `Last-Event-ID` (la spec lo deja opcional).
 - **Sin relación con `remote-server/`:** ese stub implementa el flow

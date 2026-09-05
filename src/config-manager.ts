@@ -101,6 +101,23 @@ class ConfigManager {
     await this.saveConfig();
   }
 
+  /**
+   * ID local estable para A/B testing (reemplazo sin telemetría del
+   * getOrCreateClientId original: UUID aleatorio persistido en el config
+   * local, nunca se envía a ningún lado).
+   */
+  async getOrCreateClientId(): Promise<string> {
+    await this.init();
+    let clientId = this.config['clientId'];
+    if (typeof clientId !== 'string' || clientId.length === 0) {
+      const { randomUUID } = await import('node:crypto');
+      clientId = randomUUID();
+      this.config['clientId'] = clientId;
+      await this.saveConfig();
+    }
+    return clientId;
+  }
+
   async updateConfig(updates: Partial<ServerConfig>) {
     await this.init();
     this.config = { ...this.config, ...updates };

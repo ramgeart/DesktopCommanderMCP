@@ -70,6 +70,11 @@ import {
     FILE_PREVIEW_RESOURCE_URI
 } from './ui/contracts.js';
 import { listUiResources, readUiResource } from './ui/resources.js';
+import * as handlers from './handlers/index.js';
+import { ServerResult } from './types.js';
+
+// Export current client info for access by other modules (live binding).
+export { currentClient };
 
 // Store startup messages to send after initialization
 const deferredMessages: Array<{ level: string, message: string }> = [];
@@ -87,7 +92,44 @@ export function flushDeferredMessages() {
 
 deferLog('info', 'Loading server.ts');
 
-export const server = new Server(
+// Store current client info (simple variable, module-level: compartido por
+// todas las instancias como en el diseño original de un solo proceso).
+let currentClient = { name: 'uninitialized', version: 'uninitialized' };
+
+/**
+ * Unified way to update client information
+ */
+async function updateCurrentClient(clientInfo: { name?: string, version?: string }) {
+    if (clientInfo.name !== currentClient.name || clientInfo.version !== currentClient.version) {
+        const nameChanged = clientInfo.name !== currentClient.name;
+
+        currentClient = {
+            name: clientInfo.name || currentClient.name,
+            version: clientInfo.version || currentClient.version
+        };
+
+        // Configure transport for client-specific behavior only if name changed
+        if (nameChanged) {
+            const transport = (global as any).mcpTransport;
+            if (transport && typeof transport.configureForClient === 'function') {
+                transport.configureForClient(currentClient.name);
+            }
+        }
+
+        return true;
+    }
+    return false;
+}
+
+/**
+ * Crea una instancia del servidor MCP con todos los handlers registrados.
+ * El modo stdio usa el singleton `server`; el modo Streamable HTTP crea una
+ * instancia por sesión (el transporte del SDK es de una sola sesión: un DELETE
+ * lo cierra de forma permanente, por lo que compartir uno solo rompería a los
+ * demás clientes).
+ */
+export function createMcpServer(): Server {
+const server = new Server(
     {
         name: "desktop-commander",
         version: VERSION,
@@ -127,33 +169,7 @@ server.setRequestHandler(ListPromptsRequestSchema, async () => {
     };
 });
 
-// Store current client info (simple variable)
-let currentClient = { name: 'uninitialized', version: 'uninitialized' };
-
-/**
- * Unified way to update client information
- */
-async function updateCurrentClient(clientInfo: { name?: string, version?: string }) {
-    if (clientInfo.name !== currentClient.name || clientInfo.version !== currentClient.version) {
-        const nameChanged = clientInfo.name !== currentClient.name;
-
-        currentClient = {
-            name: clientInfo.name || currentClient.name,
-            version: clientInfo.version || currentClient.version
-        };
-
-        // Configure transport for client-specific behavior only if name changed
-        if (nameChanged) {
-            const transport = (global as any).mcpTransport;
-            if (transport && typeof transport.configureForClient === 'function') {
-                transport.configureForClient(currentClient.name);
-            }
-        }
-
-        return true;
-    }
-    return false;
-}
+// (currentClient y updateCurrentClient viven a nivel de módulo, arriba)
 
 // Add handler for initialization method - capture client info
 server.setRequestHandler(InitializeRequestSchema, async (request: InitializeRequest) => {
@@ -198,9 +214,7 @@ server.setRequestHandler(InitializeRequestSchema, async (request: InitializeRequ
     }
 });
 
-// Export current client info for access by other modules
-export { currentClient };
-
+// (currentClient se exporta arriba, a nivel de módulo)
 deferLog('info', 'Setting up request handlers...');
 
 /**
@@ -1166,9 +1180,6 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
     }
 });
 
-import * as handlers from './handlers/index.js';
-import { ServerResult } from './types.js';
-
 server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest): Promise<ServerResult> => {
     const { name, arguments: args } = request.params;
     const startTime = Date.now();
@@ -1551,3 +1562,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
 
 // Add no-op handlers so Visual Studio initialization succeeds
 server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => ({ resourceTemplates: [] }));
+
+return server;
+}
+
+// Singleton para el modo stdio (src/index.ts). Ver createMcpServer().
+export const server = createMcpServer();
