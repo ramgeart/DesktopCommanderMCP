@@ -4,7 +4,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { CONFIG_EDITOR_RESOURCE_URI, FILE_PREVIEW_RESOURCE_URI } from './contracts.js';
+import { CONFIG_EDITOR_RESOURCE_URI, FILE_PREVIEW_RESOURCE_URI, isUiEnabled } from './contracts.js';
 
 const UI_RESOURCE_MIME_TYPE = 'text/html;profile=mcp-app';
 
@@ -99,10 +99,12 @@ const READABLE_UI_RESOURCES: Record<string, ReadableUiResource> = {
 };
 
 export function listUiResources() {
+    if (!isUiEnabled()) return [];
     return [FILE_PREVIEW_RESOURCE, CONFIG_EDITOR_RESOURCE];
 }
 
 export async function readUiResource(uri: string) {
+    if (!isUiEnabled()) return null;
     const resource = READABLE_UI_RESOURCES[uri];
     if (!resource) {
         return null;

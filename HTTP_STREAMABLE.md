@@ -75,6 +75,28 @@ Códigos que implementa (vía SDK): `401` sin token · `400` request sin sesión
 El bundle es: `dist/` compilado + `node_modules` (o la imagen Docker) + estas
 variables. TLS lo termina el Funnel; el servidor solo escucha en localhost.
 
+### Vía script (recomendado, idempotente)
+
+`scripts/deploy-http.sh` reproduce exactamente el despliegue de referencia:
+instala deps + compila si hace falta, **reutiliza el token existente** (solo
+genera uno si no hay), escribe `/etc/mcp-http/env` (600) y la unidad
+`mcp-http.service`, la habilita/arranca, verifica `/healthz` y aplica
+`tailscale serve` y/o `funnel`. Re-ejecutarlo es seguro.
+
+```bash
+sudo ./scripts/deploy-http.sh --funnel
+# flags: [--serve|--no-serve] [--funnel] [--port 8080] [--host mi-nodo.ts.net]
+#        [--token <hex>] [--skip-install] [--skip-build]
+#        (o vars APP_DIR / ENV_FILE / SERVICE / MCP_HTTP_PORT / MCP_HTTP_TOKEN)
+```
+
+El Funnel requiere dos permisos previos en la consola admin (una sola vez):
+`https://login.tailscale.com/f/funnel?node=<tu-nodo>` → habilitar Funnel en la
+tailnet **y** agregar el nodo a la lista de permitidos. Sin eso el script avisa
+y deja andando el `serve` de tailnet.
+
+### Manual (lo que hace el script, paso a paso)
+
 **1. Build**
 
 ```bash
@@ -92,14 +114,13 @@ openssl rand -hex 32   # guardarlo en el gestor de secretos, va en MCP_HTTP_TOKE
 
 ```ini
 [Unit]
-Description=bashun-commander MCP Streamable HTTP
+Description=bashun-commander MCP Streamable HTTP (tras Tailscale serve/funnel)
 After=network-online.target tailscaled.service
 
 [Service]
 Type=simple
-WorkingDirectory=/opt/bashun-commander
-Environment=MCP_HTTP_TOKEN=<pegar-token>
-Environment=MCP_HTTP_ALLOWED_HOSTS=mi-nodo.ts.net
+WorkingDirectory=/opt/bashun-commander   # o la ruta del repo
+EnvironmentFile=/etc/mcp-http/env        # MCP_HTTP_TOKEN + MCP_HTTP_ALLOWED_HOSTS
 ExecStart=/usr/bin/node dist/http.js
 Restart=on-failure
 RestartSec=3
@@ -108,6 +129,8 @@ NoNewPrivileges=true
 [Install]
 WantedBy=multi-user.target
 ```
+
+(El script genera esta unidad con el `WorkingDirectory` del repo donde corre.)
 
 **4. Funnel**
 
@@ -141,6 +164,43 @@ Cualquier cliente MCP con transporte Streamable HTTP:
 - **Headers MCP:** `Accept: application/json, text/event-stream` (+ `Content-Type: application/json` en POST)
 - **Sesiones:** guardar el `mcp-session-id` de la respuesta al `initialize` y
   reenviarlo como `Mcp-Session-Id`; ante `404`, reinicializar.
+
+## Widgets UI (desactivados por ahora)
+
+El servidor trae dos plantillas MCP Apps heredadas del upstream
+(`ui://desktop-commander/config-editor` y `ui://desktop-commander/file-preview`,
+en `src/ui/`). Con ellas anunciadas, el submission de plugins de OpenAI exige
+**por plantilla**: `_meta.ui.domain` (dominio único) y `_meta.ui.csp`
+(`connectDomains` / `resourceDomains`), que este fork no declara — de ahí los
+errores *"CSP del widget no configurada"* y *"dominio del widget no
+configurado"*. No son errores de runtime: las 26 tools funcionan sin widgets.
+
+Por eso vienen **apagadas por default** (`MCP_UI_RESOURCES` distinto de `1`):
+no aparecen en `resources/list`, `resources/read` las rechaza y las tools no
+las referencian en `_meta`. Para reactivarlas (solo stdio/local u otro
+servidor, no cambia el endpoint HTTP):
+
+```bash
+MCP_UI_RESOURCES=1 node dist/http.js   # o agregarlo a /etc/mcp-http/env
+```
+
+### Notas de dominios (para cuando se reactiven)
+
+- El `domain` del widget es **identidad, no conectividad**: el HTML viaja
+  inline en el `resources/read` y el widget habla por `postMessage`, nunca hace
+  HTTPS a tu servidor. No necesita CNAME ni DNS que apunte a ningún lado; con
+  que el dominio sea tuyo y lo verifiques en el submission alcanza. Usar un
+  subdominio único por plantilla (ej: `dc-config` / `dc-preview`).
+- Un **CNAME al hostname del Funnel NO sirve para exponer el MCP en tu
+  dominio**: el ingress de Tailscale enruta por SNI y termina TLS con cert para
+  `*.ts.net`, así que el TLS falla. Para `https://tu-dominio/mcp` hay que hacer
+  `A record` a la IP pública del host + terminar TLS localmente
+  (Caddy/nginx → proxy a `127.0.0.1:8080`).
+- Trabajo pendiente para submitir con widgets: implementar `getMeta()` en
+  `src/ui/resources.ts` devolviendo por plantilla
+  `_meta: { ui: { domain, csp: { connectDomains, resourceDomains } } }`
+  (nuestros templates ya hacen inline total, así que `resourceDomains` puede ir
+  vacío), versionar las URIs (`ui://.../v1.html`) y re-escanear.
 
 ## Limitaciones conocidas
 
